@@ -203,6 +203,90 @@ const RapperCard = ({
   );
 };
 
+const InteractiveScale = ({ rapper1, rapper2, events, currentEventIndex }) => {
+  // Calculate cumulative scores based on events so far
+  let rapper1Score = 0;
+  let rapper2Score = 0;
+  
+  events.slice(0, currentEventIndex + 1).forEach(event => {
+    rapper1Score += event.impact_rapper1;
+    rapper2Score += event.impact_rapper2;
+  });
+  
+  // Calculate tilt angle (-30 to 30 degrees)
+  const scoreDiff = rapper1Score - rapper2Score;
+  const maxTilt = 25;
+  const tiltAngle = Math.max(-maxTilt, Math.min(maxTilt, scoreDiff * 2));
+  
+  return (
+    <motion.div 
+      className="flex flex-col items-center py-8"
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <div className="text-[#A3A3A3] font-body text-xs uppercase tracking-widest mb-4">
+        BALANCE OF POWER
+      </div>
+      
+      {/* Scale Container */}
+      <div className="relative w-full max-w-lg h-48">
+        {/* Center Pillar */}
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-2 h-20 bg-gradient-to-t from-[#262626] to-[#525252]" />
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-20 w-4 h-4 bg-[#FFD700] rotate-45" />
+        
+        {/* Scale Beam */}
+        <motion.div 
+          className="absolute left-1/2 -translate-x-1/2 bottom-24 w-80 h-1 bg-[#525252] origin-center"
+          animate={{ rotate: tiltAngle }}
+          transition={{ type: "spring", stiffness: 100, damping: 15 }}
+          data-testid="scale-beam"
+        >
+          {/* Left Pan (Rapper 1) */}
+          <motion.div 
+            className="absolute -left-4 top-0 flex flex-col items-center"
+            style={{ transformOrigin: "top center" }}
+            animate={{ rotate: -tiltAngle }}
+          >
+            <div className="w-1 h-12 bg-[#525252]" />
+            <div className="w-20 h-3 bg-gradient-to-b from-[#FFD700] to-[#B8860B] rounded-b-full" />
+            <div className="mt-2 text-center">
+              <div className={`font-heading text-lg uppercase ${rapper1Score > rapper2Score ? 'text-[#FFD700]' : 'text-[#A3A3A3]'}`}>
+                {rapper1?.name?.split(' ')[0] || 'P1'}
+              </div>
+              <div className={`font-body text-xl font-bold ${rapper1Score >= 0 ? 'text-green-500' : 'text-[#FF3B30]'}`}>
+                {rapper1Score > 0 ? '+' : ''}{rapper1Score}
+              </div>
+            </div>
+          </motion.div>
+          
+          {/* Right Pan (Rapper 2) */}
+          <motion.div 
+            className="absolute -right-4 top-0 flex flex-col items-center"
+            style={{ transformOrigin: "top center" }}
+            animate={{ rotate: -tiltAngle }}
+          >
+            <div className="w-1 h-12 bg-[#525252]" />
+            <div className="w-20 h-3 bg-gradient-to-b from-[#FFD700] to-[#B8860B] rounded-b-full" />
+            <div className="mt-2 text-center">
+              <div className={`font-heading text-lg uppercase ${rapper2Score > rapper1Score ? 'text-[#FFD700]' : 'text-[#A3A3A3]'}`}>
+                {rapper2?.name?.split(' ')[0] || 'P2'}
+              </div>
+              <div className={`font-body text-xl font-bold ${rapper2Score >= 0 ? 'text-green-500' : 'text-[#FF3B30]'}`}>
+                {rapper2Score > 0 ? '+' : ''}{rapper2Score}
+              </div>
+            </div>
+          </motion.div>
+          
+          {/* Center Scale Icon */}
+          <div className="absolute left-1/2 -translate-x-1/2 -top-3">
+            <Scale className="w-6 h-6 text-[#FFD700]" />
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+};
+
 const BattleTimeline = ({ events, currentEventIndex }) => {
   return (
     <div className="relative pl-6 border-l border-[#262626]">
@@ -391,6 +475,7 @@ const RapBeefSimulator = () => {
   const [currentEventIndex, setCurrentEventIndex] = useState(-1);
   const [damageReport, setDamageReport] = useState(null);
   const [showDamageReport, setShowDamageReport] = useState(false);
+  const [battleComplete, setBattleComplete] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -424,6 +509,7 @@ const RapBeefSimulator = () => {
     setBattleEvents([]);
     setCurrentEventIndex(-1);
     setDamageReport(null);
+    setBattleComplete(false);
 
     try {
       const response = await axios.post(`${API}/battle`, {
@@ -435,17 +521,8 @@ const RapBeefSimulator = () => {
       setBattleEvents(response.data.events);
       setDamageReport(response.data.damage_report);
       setBattleLoading(false);
-
-      // Animate events one by one
-      for (let i = 0; i < response.data.events.length; i++) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        setCurrentEventIndex(i);
-      }
-
-      // Show damage report after all events
-      setTimeout(() => {
-        setShowDamageReport(true);
-      }, 1500);
+      // Start at first event
+      setCurrentEventIndex(0);
 
     } catch (e) {
       console.error("Battle error:", e);
@@ -461,11 +538,26 @@ const RapBeefSimulator = () => {
     setCurrentEventIndex(-1);
     setDamageReport(null);
     setShowDamageReport(false);
+    setBattleComplete(false);
     setRapper1(null);
     setRapper2(null);
     setEra1(2015);
     setEra2(2015);
     setError(null);
+  };
+
+  const nextRound = () => {
+    if (currentEventIndex < battleEvents.length - 1) {
+      setCurrentEventIndex(prev => prev + 1);
+    } else {
+      // Battle complete - show damage report
+      setBattleComplete(true);
+      setShowDamageReport(true);
+    }
+  };
+
+  const viewStats = () => {
+    setShowDamageReport(true);
   };
 
   return (
@@ -618,29 +710,64 @@ const RapBeefSimulator = () => {
                 <p className="text-[#A3A3A3] font-body mt-4">Generating epic beef...</p>
               </div>
             ) : (
-              <div className="max-w-2xl mx-auto">
-                <BattleTimeline 
-                  events={battleEvents} 
+              <>
+                {/* Interactive Scale */}
+                <InteractiveScale 
+                  rapper1={rapper1}
+                  rapper2={rapper2}
+                  events={battleEvents}
                   currentEventIndex={currentEventIndex}
                 />
-              </div>
-            )}
 
-            {/* Reset Button */}
-            {currentEventIndex >= battleEvents.length - 1 && !battleLoading && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-center"
-              >
-                <Button
-                  onClick={resetBattle}
-                  className="bg-[#1A1A1A] hover:bg-[#262626] border border-[#262626] hover:border-[#FF3B30] rounded-none h-12 font-body uppercase"
-                  data-testid="new-battle-btn"
-                >
-                  Start New Beef
-                </Button>
-              </motion.div>
+                {/* Timeline */}
+                <div className="max-w-2xl mx-auto">
+                  <BattleTimeline 
+                    events={battleEvents} 
+                    currentEventIndex={currentEventIndex}
+                  />
+                </div>
+
+                {/* Next Round / View Stats Buttons */}
+                <div className="flex justify-center gap-4 mt-8">
+                  {!battleComplete ? (
+                    <Button
+                      onClick={nextRound}
+                      className="bg-[#FF3B30] hover:bg-[#D62B22] rounded-none h-14 px-8 font-heading text-xl uppercase"
+                      data-testid="next-round-btn"
+                    >
+                      {currentEventIndex < battleEvents.length - 1 ? (
+                        <>
+                          <Zap className="w-5 h-5 mr-2" />
+                          NEXT ROUND ({currentEventIndex + 2}/{battleEvents.length})
+                        </>
+                      ) : (
+                        <>
+                          <Trophy className="w-5 h-5 mr-2" />
+                          VIEW FINAL RESULTS
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={viewStats}
+                        className="bg-[#FFD700] hover:bg-[#DAA520] text-black rounded-none h-12 px-6 font-heading text-lg uppercase"
+                        data-testid="view-stats-btn"
+                      >
+                        <Trophy className="w-5 h-5 mr-2" />
+                        VIEW STATS
+                      </Button>
+                      <Button
+                        onClick={resetBattle}
+                        className="bg-[#1A1A1A] hover:bg-[#262626] border border-[#262626] hover:border-[#FF3B30] rounded-none h-12 px-6 font-body uppercase"
+                        data-testid="new-battle-btn"
+                      >
+                        NEW BEEF
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}
