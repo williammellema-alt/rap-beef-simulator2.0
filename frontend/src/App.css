@@ -1,34 +1,102 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* Custom styles for Rap Beef Simulator */
+
+.App {
+  min-height: 100vh;
+  background-color: #050505;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+/* Tier badges */
+.tier-badge {
+  font-family: 'Anton', sans-serif;
+  font-size: 1.25rem;
+  padding: 0.25rem 0.75rem;
+  text-transform: uppercase;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+.tier-s { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; }
+.tier-a { background: linear-gradient(135deg, #FF3B30, #D62B22); color: #fff; }
+.tier-b { background: linear-gradient(135deg, #525252, #3d3d3d); color: #fff; }
+.tier-c { background: linear-gradient(135deg, #262626, #1a1a1a); color: #A3A3A3; }
+
+/* Era text */
+.era-display {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
 }
 
-.App-link {
-    color: #61dafb;
+/* Battle animation */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.battle-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Damage bar */
+.damage-bar {
+  height: 8px;
+  background: #262626;
+  overflow: hidden;
+}
+
+.damage-fill {
+  height: 100%;
+  transition: width 0.5s ease-out;
+}
+
+.damage-fill.positive {
+  background: linear-gradient(90deg, #FFD700, #00FF00);
+}
+
+.damage-fill.negative {
+  background: linear-gradient(90deg, #FF3B30, #8B0000);
+}
+
+/* Winner crown */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.winner-crown {
+  animation: float 2s ease-in-out infinite;
+}
+
+/* Glitch text effect */
+@keyframes glitch {
+  0% {
+    text-shadow: 2px 0 #FF3B30, -2px 0 #FFD700;
+  }
+  25% {
+    text-shadow: -2px 0 #FF3B30, 2px 0 #FFD700;
+  }
+  50% {
+    text-shadow: 2px 2px #FF3B30, -2px -2px #FFD700;
+  }
+  75% {
+    text-shadow: -2px 2px #FF3B30, 2px -2px #FFD700;
+  }
+  100% {
+    text-shadow: 2px 0 #FF3B30, -2px 0 #FFD700;
+  }
+}
+
+.glitch-text {
+  animation: glitch 0.3s ease-in-out infinite;
+}
+
+/* Impact indicators */
+.impact-positive {
+  color: #00FF00;
+  text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.impact-negative {
+  color: #FF3B30;
+  text-shadow: 0 0 10px rgba(255, 59, 48, 0.5);
 }
