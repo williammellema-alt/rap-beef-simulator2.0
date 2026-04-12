@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Scale, Swords, Crown, Zap, Users, AlertTriangle, Trophy } from "lucide-react";
+import { Scale, Swords, Crown, Zap, Users, AlertTriangle, Trophy, Flame } from "lucide-react";
 import axios from "axios";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -23,6 +23,7 @@ import {
 } from "../components/ui/popover";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { playScaleTilt, playBattleStart, playNextRound, playVictory, playProvocation } from "../utils/sounds";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -166,7 +167,21 @@ const RapperCard = ({
               {getEraLabel(era)}
             </div>
           </div>
-          <div className="slider-gold px-2">
+          <div className="slider-gold px-2 relative">
+            {/* Prime Era Marker */}
+            {rapper && (
+              <div 
+                className="absolute -top-1 w-0.5 h-3 bg-[#FF3B30] z-10 pointer-events-none"
+                style={{ 
+                  left: `calc(${((rapper.default_era - 1990) / (2025 - 1990)) * 100}% + 8px)`,
+                }}
+                data-testid={`prime-marker-${side}`}
+              >
+                <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[#FF3B30] text-[10px] font-body whitespace-nowrap">
+                  PRIME
+                </div>
+              </div>
+            )}
             <Slider
               value={[era]}
               min={1990}
@@ -220,66 +235,73 @@ const InteractiveScale = ({ rapper1, rapper2, events, currentEventIndex }) => {
   
   return (
     <motion.div 
-      className="flex flex-col items-center py-8"
+      className="flex flex-col items-center py-4 mb-6"
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
     >
-      <div className="text-[#A3A3A3] font-body text-xs uppercase tracking-widest mb-4">
+      {/* Score Display - Above Scale */}
+      <div className="flex items-center justify-center gap-12 mb-4">
+        <div className="text-center">
+          <div className={`font-heading text-xl uppercase ${rapper1Score > rapper2Score ? 'text-[#FFD700]' : 'text-[#A3A3A3]'}`}>
+            {rapper1?.name || 'P1'}
+          </div>
+          <div className={`font-body text-3xl font-bold ${rapper1Score >= 0 ? 'text-green-500' : 'text-[#FF3B30]'}`}>
+            {rapper1Score > 0 ? '+' : ''}{rapper1Score}
+          </div>
+        </div>
+        
+        <div className="text-[#525252] font-heading text-2xl">VS</div>
+        
+        <div className="text-center">
+          <div className={`font-heading text-xl uppercase ${rapper2Score > rapper1Score ? 'text-[#FFD700]' : 'text-[#A3A3A3]'}`}>
+            {rapper2?.name || 'P2'}
+          </div>
+          <div className={`font-body text-3xl font-bold ${rapper2Score >= 0 ? 'text-green-500' : 'text-[#FF3B30]'}`}>
+            {rapper2Score > 0 ? '+' : ''}{rapper2Score}
+          </div>
+        </div>
+      </div>
+
+      <div className="text-[#A3A3A3] font-body text-xs uppercase tracking-widest mb-2">
         BALANCE OF POWER
       </div>
       
-      {/* Scale Container */}
-      <div className="relative w-full max-w-lg h-48">
+      {/* Scale Container - Compact */}
+      <div className="relative w-full max-w-md h-24">
         {/* Center Pillar */}
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-2 h-20 bg-gradient-to-t from-[#262626] to-[#525252]" />
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-20 w-4 h-4 bg-[#FFD700] rotate-45" />
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-1 h-10 bg-gradient-to-t from-[#262626] to-[#525252]" />
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-10 w-3 h-3 bg-[#FFD700] rotate-45" />
         
         {/* Scale Beam */}
         <motion.div 
-          className="absolute left-1/2 -translate-x-1/2 bottom-24 w-80 h-1 bg-[#525252] origin-center"
+          className="absolute left-1/2 -translate-x-1/2 bottom-14 w-64 h-1 bg-[#525252] origin-center flex items-center justify-between"
           animate={{ rotate: tiltAngle }}
           transition={{ type: "spring", stiffness: 100, damping: 15 }}
           data-testid="scale-beam"
         >
           {/* Left Pan (Rapper 1) */}
           <motion.div 
-            className="absolute -left-4 top-0 flex flex-col items-center"
+            className="absolute -left-2 top-0 flex flex-col items-center"
             style={{ transformOrigin: "top center" }}
             animate={{ rotate: -tiltAngle }}
           >
-            <div className="w-1 h-12 bg-[#525252]" />
-            <div className="w-20 h-3 bg-gradient-to-b from-[#FFD700] to-[#B8860B] rounded-b-full" />
-            <div className="mt-2 text-center">
-              <div className={`font-heading text-lg uppercase ${rapper1Score > rapper2Score ? 'text-[#FFD700]' : 'text-[#A3A3A3]'}`}>
-                {rapper1?.name?.split(' ')[0] || 'P1'}
-              </div>
-              <div className={`font-body text-xl font-bold ${rapper1Score >= 0 ? 'text-green-500' : 'text-[#FF3B30]'}`}>
-                {rapper1Score > 0 ? '+' : ''}{rapper1Score}
-              </div>
-            </div>
+            <div className="w-0.5 h-6 bg-[#525252]" />
+            <div className={`w-12 h-2 rounded-b-full ${rapper1Score > rapper2Score ? 'bg-gradient-to-b from-[#FFD700] to-[#B8860B]' : 'bg-[#525252]'}`} />
           </motion.div>
           
           {/* Right Pan (Rapper 2) */}
           <motion.div 
-            className="absolute -right-4 top-0 flex flex-col items-center"
+            className="absolute -right-2 top-0 flex flex-col items-center"
             style={{ transformOrigin: "top center" }}
             animate={{ rotate: -tiltAngle }}
           >
-            <div className="w-1 h-12 bg-[#525252]" />
-            <div className="w-20 h-3 bg-gradient-to-b from-[#FFD700] to-[#B8860B] rounded-b-full" />
-            <div className="mt-2 text-center">
-              <div className={`font-heading text-lg uppercase ${rapper2Score > rapper1Score ? 'text-[#FFD700]' : 'text-[#A3A3A3]'}`}>
-                {rapper2?.name?.split(' ')[0] || 'P2'}
-              </div>
-              <div className={`font-body text-xl font-bold ${rapper2Score >= 0 ? 'text-green-500' : 'text-[#FF3B30]'}`}>
-                {rapper2Score > 0 ? '+' : ''}{rapper2Score}
-              </div>
-            </div>
+            <div className="w-0.5 h-6 bg-[#525252]" />
+            <div className={`w-12 h-2 rounded-b-full ${rapper2Score > rapper1Score ? 'bg-gradient-to-b from-[#FFD700] to-[#B8860B]' : 'bg-[#525252]'}`} />
           </motion.div>
           
           {/* Center Scale Icon */}
-          <div className="absolute left-1/2 -translate-x-1/2 -top-3">
-            <Scale className="w-6 h-6 text-[#FFD700]" />
+          <div className="absolute left-1/2 -translate-x-1/2 -top-2">
+            <Scale className="w-4 h-4 text-[#FFD700]" />
           </div>
         </motion.div>
       </div>
@@ -310,9 +332,16 @@ const BattleTimeline = ({ events, currentEventIndex }) => {
             
             <div className="ml-4 p-4 bg-[#1A1A1A] border border-[#262626] card-gritty">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-heading text-lg text-[#FF3B30] uppercase">
-                  Round {event.round_number}: {event.event_type}
-                </span>
+                <div>
+                  <span className="font-heading text-lg text-[#FF3B30] uppercase">
+                    Round {event.round_number}: {event.event_type}
+                  </span>
+                  {event.track_name && (
+                    <span className="ml-2 text-[#FFD700] font-body text-sm italic">
+                      "{event.track_name}"
+                    </span>
+                  )}
+                </div>
                 <span className="text-[#FFD700] font-body text-sm uppercase flex items-center gap-1">
                   <Crown className="w-4 h-4" />
                   {event.winner}
@@ -476,6 +505,8 @@ const RapBeefSimulator = () => {
   const [damageReport, setDamageReport] = useState(null);
   const [showDamageReport, setShowDamageReport] = useState(false);
   const [battleComplete, setBattleComplete] = useState(false);
+  const [provocation, setProvocation] = useState(null);
+  const [showProvocation, setShowProvocation] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -510,6 +541,9 @@ const RapBeefSimulator = () => {
     setCurrentEventIndex(-1);
     setDamageReport(null);
     setBattleComplete(false);
+    setProvocation(null);
+    setShowProvocation(false);
+    playBattleStart();
 
     try {
       const response = await axios.post(`${API}/battle`, {
@@ -520,9 +554,11 @@ const RapBeefSimulator = () => {
 
       setBattleEvents(response.data.events);
       setDamageReport(response.data.damage_report);
+      setProvocation(response.data.provocation);
       setBattleLoading(false);
-      // Start at first event
-      setCurrentEventIndex(0);
+      // Show provocation first, events start at -1 (not shown yet)
+      setShowProvocation(true);
+      playProvocation();
 
     } catch (e) {
       console.error("Battle error:", e);
@@ -539,6 +575,8 @@ const RapBeefSimulator = () => {
     setDamageReport(null);
     setShowDamageReport(false);
     setBattleComplete(false);
+    setProvocation(null);
+    setShowProvocation(false);
     setRapper1(null);
     setRapper2(null);
     setEra1(2015);
@@ -547,12 +585,20 @@ const RapBeefSimulator = () => {
   };
 
   const nextRound = () => {
-    if (currentEventIndex < battleEvents.length - 1) {
+    if (showProvocation && currentEventIndex === -1) {
+      // Move from provocation to first round
+      setCurrentEventIndex(0);
+      playNextRound();
+      playScaleTilt();
+    } else if (currentEventIndex < battleEvents.length - 1) {
       setCurrentEventIndex(prev => prev + 1);
+      playNextRound();
+      playScaleTilt();
     } else {
       // Battle complete - show damage report
       setBattleComplete(true);
       setShowDamageReport(true);
+      playVictory();
     }
   };
 
@@ -711,21 +757,62 @@ const RapBeefSimulator = () => {
               </div>
             ) : (
               <>
-                {/* Interactive Scale */}
-                <InteractiveScale 
-                  rapper1={rapper1}
-                  rapper2={rapper2}
-                  events={battleEvents}
-                  currentEventIndex={currentEventIndex}
-                />
-
-                {/* Timeline */}
-                <div className="max-w-2xl mx-auto">
-                  <BattleTimeline 
-                    events={battleEvents} 
+                {/* Interactive Scale - only show once rounds start */}
+                {currentEventIndex >= 0 && (
+                  <InteractiveScale 
+                    rapper1={rapper1}
+                    rapper2={rapper2}
+                    events={battleEvents}
                     currentEventIndex={currentEventIndex}
                   />
-                </div>
+                )}
+
+                {/* Provocation Round */}
+                {showProvocation && provocation && currentEventIndex === -1 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                    className="max-w-2xl mx-auto"
+                    data-testid="provocation-round"
+                  >
+                    <div className="p-6 bg-[#1A1A1A] border-2 border-[#FF3B30]/50 relative overflow-hidden">
+                      <div className="absolute inset-0 bg-[#FF3B30]/5" />
+                      <div className="relative z-10">
+                        <div className="flex items-center gap-3 mb-4">
+                          <Flame className="w-6 h-6 text-[#FF3B30]" />
+                          <span className="font-heading text-xl text-[#FF3B30] uppercase">
+                            THE PROVOCATION
+                          </span>
+                          <span className="text-[#525252] font-body text-xs ml-auto uppercase">
+                            DOES NOT COUNT TOWARD SCORE
+                          </span>
+                        </div>
+                        {provocation.track_name && (
+                          <div className="text-[#FFD700] font-body text-sm italic mb-2">
+                            "{provocation.track_name}"
+                          </div>
+                        )}
+                        <p className="text-white font-body text-sm leading-relaxed mb-3">
+                          {provocation.description}
+                        </p>
+                        <div className="text-[#A3A3A3] font-body text-xs uppercase">
+                          Instigated by: <span className="text-[#FFD700]">{provocation.instigator}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Timeline */}
+                {currentEventIndex >= 0 && (
+                  <div className="max-w-2xl mx-auto">
+                    <BattleTimeline 
+                      events={battleEvents} 
+                      currentEventIndex={currentEventIndex}
+                    />
+                  </div>
+                )}
 
                 {/* Next Round / View Stats Buttons */}
                 <div className="flex justify-center gap-4 mt-8">
@@ -735,7 +822,12 @@ const RapBeefSimulator = () => {
                       className="bg-[#FF3B30] hover:bg-[#D62B22] rounded-none h-14 px-8 font-heading text-xl uppercase"
                       data-testid="next-round-btn"
                     >
-                      {currentEventIndex < battleEvents.length - 1 ? (
+                      {currentEventIndex === -1 ? (
+                        <>
+                          <Swords className="w-5 h-5 mr-2" />
+                          BEGIN ROUND 1
+                        </>
+                      ) : currentEventIndex < battleEvents.length - 1 ? (
                         <>
                           <Zap className="w-5 h-5 mr-2" />
                           NEXT ROUND ({currentEventIndex + 2}/{battleEvents.length})

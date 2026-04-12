@@ -90,9 +90,16 @@ class BattleRequest(BaseModel):
     rapper2: RapperInfo
     war_zone: bool = False
 
+class Provocation(BaseModel):
+    event_type: str = "Provocation"
+    track_name: Optional[str] = None
+    description: str
+    instigator: str
+
 class BattleEvent(BaseModel):
     round_number: int
     event_type: str
+    track_name: Optional[str] = None
     description: str
     winner: str
     impact_rapper1: int
@@ -111,6 +118,7 @@ class DamageReport(BaseModel):
 
 class BattleResponse(BaseModel):
     battle_id: str
+    provocation: Provocation
     events: List[BattleEvent]
     damage_report: DamageReport
 
@@ -130,6 +138,20 @@ def get_era_bonus(era: int) -> int:
         if start <= era <= end:
             return bonus
     return 5
+
+def generate_win_pattern(name1, name2):
+    """Generate a non-alternating, non-uniform random win pattern."""
+    names = [name1, name2]
+    while True:
+        pattern = [random.choice(names) for _ in range(5)]
+        # Reject fully alternating patterns
+        is_alternating = all(pattern[i] != pattern[i+1] for i in range(4))
+        # Reject all-same patterns
+        is_uniform = len(set(pattern)) == 1
+        # Ensure both rappers win at least once
+        both_win = name1 in pattern and name2 in pattern
+        if not is_alternating and not is_uniform and both_win:
+            return pattern
 
 # Routes
 @api_router.get("/")
@@ -166,36 +188,54 @@ async def start_battle(request: BattleRequest):
     r1_base = get_tier_value(r1.tier) + get_era_bonus(r1.era)
     r2_base = get_tier_value(r2.tier) + get_era_bonus(r2.era)
     
+    # Generate randomized win pattern
+    win_pattern = generate_win_pattern(r1.name, r2.name)
+    win_pattern_str = ", ".join([f"Round {i+1}: {w}" for i, w in enumerate(win_pattern)])
+    
     prompt = f"""Generate a 5-round rap beef battle between {r1.name} (Tier: {r1.tier}, Era: {r1.era}, Base Score: {r1_base}) 
     and {r2.name} (Tier: {r2.tier}, Era: {r2.era}, Base Score: {r2_base}).
     
     War Zone Mode: {"ENABLED - Include dramatic ally interventions from hip-hop figures" if war_zone else "DISABLED"}
     
-    For each round, create a dramatic event (diss track, interview diss, social media beef, surprise performance, etc.)
-    Decide the winner based on their tiers and eras. Higher tier and prime era should generally perform better.
+    IMPORTANT RULES:
+    1. Make the battle COMPETITIVE - each rapper should win at least 1-2 rounds. No blowouts!
+    2. For DISS TRACKS, always include a creative track name in quotes (e.g., "Back to Back", "Ether", "Hit 'Em Up")
+    3. Event types can be: Diss Track, Interview Diss, Social Media Beef, Surprise Performance, Feature Snub, Award Show Shade, Podcast Attack
+    4. Impact scores should be close (-5 to 5 range typically). A round winner gets +3 to +7, loser gets -3 to -7
+    5. The overall winner should only be slightly ahead, reflecting a competitive battle
+    6. CRITICAL - WINNER PATTERN: The round winners must NOT alternate predictably (not A,B,A,B,A). 
+       Use this exact winner pattern for the 5 rounds: {win_pattern_str}
+       Follow it exactly. This ensures unpredictability.
     
     Return ONLY a JSON object with this exact structure:
     {{
+        "provocation": {{
+            "event_type": "Provocation",
+            "track_name": "optional creative name if applicable",
+            "description": "A dramatic setup explaining WHY this beef started - a chance encounter, stolen beat, subliminal bar, award show snub, interview callout, feature gone wrong, etc. Make it specific and creative. This should feel like the inciting incident.",
+            "instigator": "{r1.name}" or "{r2.name}"
+        }},
         "events": [
             {{
                 "round_number": 1,
                 "event_type": "Diss Track",
-                "description": "Dramatic description of what happened",
+                "track_name": "Creative Track Title Here",
+                "description": "Dramatic description mentioning the track name",
                 "winner": "{r1.name}" or "{r2.name}",
-                "impact_rapper1": -10 to 10 (positive if they won, negative if lost),
-                "impact_rapper2": -10 to 10 (positive if they won, negative if lost)
-                {"," + '"ally_intervention": {"name": "ally name", "power": "their power", "helped": "rapper name", "impact": 5}' if war_zone else ""}
+                "impact_rapper1": -7 to 7 (positive if they won, negative if lost),
+                "impact_rapper2": -7 to 7 (positive if they won, negative if lost)
+                {"," + '"ally_intervention": {"name": "ally name", "power": "their power", "helped": "rapper name", "impact": 3}' if war_zone else ""}
             }}
         ],
         "damage_report": {{
             "rapper1_name": "{r1.name}",
-            "rapper1_final_score": calculated score (0-100),
+            "rapper1_final_score": calculated score (40-100, should be close to rapper2),
             "rapper1_career_impact": "Description of career impact",
             "rapper2_name": "{r2.name}",
-            "rapper2_final_score": calculated score (0-100),
+            "rapper2_final_score": calculated score (40-100, should be close to rapper1),
             "rapper2_career_impact": "Description of career impact",
             "overall_winner": "{r1.name}" or "{r2.name}",
-            "summary": "Epic summary of the beef"
+            "summary": "Epic summary emphasizing how close and competitive the beef was"
         }}
     }}"""
     
@@ -214,6 +254,7 @@ async def start_battle(request: BattleRequest):
         
         battle_data = json.loads(response_text.strip())
         
+        provocation = Provocation(**battle_data["provocation"])
         events = [BattleEvent(**event) for event in battle_data["events"]]
         damage_report = DamageReport(**battle_data["damage_report"])
         
@@ -223,6 +264,7 @@ async def start_battle(request: BattleRequest):
             "rapper1": r1.model_dump(),
             "rapper2": r2.model_dump(),
             "war_zone": war_zone,
+            "provocation": provocation.model_dump(),
             "events": [e.model_dump() for e in events],
             "damage_report": damage_report.model_dump(),
             "timestamp": datetime.now(timezone.utc).isoformat()
@@ -231,6 +273,7 @@ async def start_battle(request: BattleRequest):
         
         return BattleResponse(
             battle_id=battle_id,
+            provocation=provocation,
             events=events,
             damage_report=damage_report
         )
