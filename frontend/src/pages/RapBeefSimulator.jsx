@@ -338,7 +338,7 @@ const BattleTimeline = ({ events, currentEventIndex }) => {
                   </span>
                   {event.track_name && (
                     <span className="ml-2 text-[#FFD700] font-body text-sm italic">
-                      "{event.track_name}"
+                      "{event.track_name.replace(/^["']+|["']+$/g, '')}"
                     </span>
                   )}
                 </div>
@@ -790,7 +790,7 @@ const RapBeefSimulator = () => {
                         </div>
                         {provocation.track_name && (
                           <div className="text-[#FFD700] font-body text-sm italic mb-2">
-                            "{provocation.track_name}"
+                            "{provocation.track_name.replace(/^["']+|["']+$/g, '')}"
                           </div>
                         )}
                         <p className="text-white font-body text-sm leading-relaxed mb-3">
