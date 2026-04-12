@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 import json
-import random
+import secrets
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -21,14 +21,19 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# Predefined rappers with tiers
-RAPPERS = [
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# --- Data ---
+
+RAPPERS: list[dict] = [
     {"name": "Kendrick Lamar", "tier": "S", "default_era": 2015},
     {"name": "Drake", "tier": "S", "default_era": 2018},
     {"name": "Eminem", "tier": "S", "default_era": 2002},
@@ -57,22 +62,19 @@ RAPPERS = [
     {"name": "Logic", "tier": "C", "default_era": 2017},
 ]
 
-ALLY_POOL = [
-    {"name": "DJ Akademiks", "power": "Media Manipulation", "impact": 5},
-    {"name": "Joe Budden", "power": "Podcast Warfare", "impact": 7},
-    {"name": "Charlamagne tha God", "power": "Donkey of the Day", "impact": 8},
-    {"name": "Funkmaster Flex", "power": "Bomb Drop Fury", "impact": 6},
-    {"name": "Dame Dash", "power": "Industry Insider", "impact": 4},
-    {"name": "Suge Knight", "power": "Intimidation Factor", "impact": 9},
-    {"name": "Diddy", "power": "Bad Boy Backing", "impact": 7},
-    {"name": "Dr. Dre", "power": "Production Power", "impact": 10},
-    {"name": "Birdman", "power": "Cash Money Clout", "impact": 5},
+TIER_VALUES: dict[str, int] = {"S": 100, "A": 80, "B": 60, "C": 40, "D": 20}
+
+ERA_BONUSES: list[tuple[int, int, int]] = [
+    (1990, 1999, 15),
+    (2000, 2009, 12),
+    (2010, 2019, 10),
+    (2020, 2026, 8),
 ]
 
-# Define Models
+# --- Models ---
+
 class StatusCheck(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -122,154 +124,145 @@ class BattleResponse(BaseModel):
     events: List[BattleEvent]
     damage_report: DamageReport
 
-# Helper functions
+# --- Helpers ---
+
 def get_tier_value(tier: str) -> int:
-    tier_map = {"S": 100, "A": 80, "B": 60, "C": 40, "D": 20}
-    return tier_map.get(tier.upper(), 50)
+    return TIER_VALUES.get(tier.upper(), 50)
 
 def get_era_bonus(era: int) -> int:
-    prime_years = {
-        (1990, 1999): 15,
-        (2000, 2009): 12,
-        (2010, 2019): 10,
-        (2020, 2026): 8,
-    }
-    for (start, end), bonus in prime_years.items():
+    for start, end, bonus in ERA_BONUSES:
         if start <= era <= end:
             return bonus
     return 5
 
-def generate_win_pattern(name1, name2):
-    """Generate a non-alternating, non-uniform random win pattern."""
+def generate_win_pattern(name1: str, name2: str) -> list[str]:
+    """Generate a non-alternating, non-uniform random win pattern using secrets."""
     names = [name1, name2]
     while True:
-        pattern = [random.choice(names) for _ in range(5)]
-        # Reject fully alternating patterns
-        is_alternating = all(pattern[i] != pattern[i+1] for i in range(4))
-        # Reject all-same patterns
+        pattern = [names[secrets.randbelow(2)] for _ in range(5)]
+        is_alternating = all(pattern[i] != pattern[i + 1] for i in range(4))
         is_uniform = len(set(pattern)) == 1
-        # Ensure both rappers win at least once
         both_win = name1 in pattern and name2 in pattern
         if not is_alternating and not is_uniform and both_win:
             return pattern
 
-# Routes
+def build_battle_prompt(r1: RapperInfo, r2: RapperInfo, war_zone: bool, win_pattern_str: str) -> str:
+    r1_base = get_tier_value(r1.tier) + get_era_bonus(r1.era)
+    r2_base = get_tier_value(r2.tier) + get_era_bonus(r2.era)
+    
+    ally_snippet = ""
+    if war_zone:
+        ally_snippet = ',"ally_intervention": {"name": "ally name", "power": "their power", "helped": "rapper name", "impact": 3}'
+
+    return f"""Generate a 5-round rap beef battle between {r1.name} (Tier: {r1.tier}, Era: {r1.era}, Base Score: {r1_base}) \
+and {r2.name} (Tier: {r2.tier}, Era: {r2.era}, Base Score: {r2_base}).
+
+War Zone Mode: {"ENABLED - Include dramatic ally interventions from hip-hop figures" if war_zone else "DISABLED"}
+
+IMPORTANT RULES:
+1. Make the battle COMPETITIVE - each rapper should win at least 1-2 rounds. No blowouts!
+2. For DISS TRACKS, always include a creative track name in quotes (e.g., "Back to Back", "Ether", "Hit 'Em Up")
+3. Event types can be: Diss Track, Interview Diss, Social Media Beef, Surprise Performance, Feature Snub, Award Show Shade, Podcast Attack
+4. Impact scores should be close (-5 to 5 range typically). A round winner gets +3 to +7, loser gets -3 to -7
+5. The overall winner should only be slightly ahead, reflecting a competitive battle
+6. CRITICAL - WINNER PATTERN: The round winners must NOT alternate predictably (not A,B,A,B,A). \
+Use this exact winner pattern for the 5 rounds: {win_pattern_str}
+Follow it exactly. This ensures unpredictability.
+
+Return ONLY a JSON object with this exact structure:
+{{
+    "provocation": {{
+        "event_type": "Provocation",
+        "track_name": "optional creative name if applicable",
+        "description": "A dramatic setup explaining WHY this beef started - a chance encounter, stolen beat, subliminal bar, award show snub, interview callout, feature gone wrong, etc. Make it specific and creative. This should feel like the inciting incident.",
+        "instigator": "{r1.name}" or "{r2.name}"
+    }},
+    "events": [
+        {{
+            "round_number": 1,
+            "event_type": "Diss Track",
+            "track_name": "Creative Track Title Here",
+            "description": "Dramatic description mentioning the track name",
+            "winner": "{r1.name}" or "{r2.name}",
+            "impact_rapper1": -7 to 7 (positive if they won, negative if lost),
+            "impact_rapper2": -7 to 7 (positive if they won, negative if lost){ally_snippet}
+        }}
+    ],
+    "damage_report": {{
+        "rapper1_name": "{r1.name}",
+        "rapper1_final_score": calculated score (40-100, should be close to rapper2),
+        "rapper1_career_impact": "Description of career impact",
+        "rapper2_name": "{r2.name}",
+        "rapper2_final_score": calculated score (40-100, should be close to rapper1),
+        "rapper2_career_impact": "Description of career impact",
+        "overall_winner": "{r1.name}" or "{r2.name}",
+        "summary": "Epic summary emphasizing how close and competitive the beef was"
+    }}
+}}"""
+
+def parse_llm_response(response_text: str) -> dict:
+    """Strip markdown fences and parse JSON."""
+    text = response_text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return json.loads(text.strip())
+
+async def store_battle(battle_id: str, request: BattleRequest, provocation: Provocation, events: list[BattleEvent], damage_report: DamageReport) -> None:
+    battle_doc = {
+        "battle_id": battle_id,
+        "rapper1": request.rapper1.model_dump(),
+        "rapper2": request.rapper2.model_dump(),
+        "war_zone": request.war_zone,
+        "provocation": provocation.model_dump(),
+        "events": [e.model_dump() for e in events],
+        "damage_report": damage_report.model_dump(),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    await db.battles.insert_one(battle_doc)
+
+# --- Routes ---
+
 @api_router.get("/")
-async def root():
+async def root() -> dict:
     return {"message": "Rap Beef Simulator API"}
 
 @api_router.get("/rappers")
-async def get_rappers():
+async def get_rappers() -> list[dict]:
     return RAPPERS
 
 @api_router.post("/battle", response_model=BattleResponse)
-async def start_battle(request: BattleRequest):
+async def start_battle(request: BattleRequest) -> BattleResponse:
     battle_id = str(uuid.uuid4())
     
-    # Get API key
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="LLM API key not configured")
     
-    # Initialize LLM
     chat = LlmChat(
         api_key=api_key,
         session_id=f"battle-{battle_id}",
-        system_message="""You are a legendary hip-hop battle narrator and judge. You narrate rap beef events with dramatic flair, 
-        using authentic hip-hop culture references. You decide winners based on lyrical ability, cultural impact, and era-specific factors.
-        Always respond with valid JSON only, no other text."""
+        system_message="You are a legendary hip-hop battle narrator and judge. You narrate rap beef events with dramatic flair, "
+        "using authentic hip-hop culture references. You decide winners based on lyrical ability, cultural impact, and era-specific factors. "
+        "Always respond with valid JSON only, no other text."
     ).with_model("openai", "gpt-5.2")
     
-    r1 = request.rapper1
-    r2 = request.rapper2
-    war_zone = request.war_zone
-    
-    # Calculate base scores
-    r1_base = get_tier_value(r1.tier) + get_era_bonus(r1.era)
-    r2_base = get_tier_value(r2.tier) + get_era_bonus(r2.era)
-    
-    # Generate randomized win pattern
-    win_pattern = generate_win_pattern(r1.name, r2.name)
+    win_pattern = generate_win_pattern(request.rapper1.name, request.rapper2.name)
     win_pattern_str = ", ".join([f"Round {i+1}: {w}" for i, w in enumerate(win_pattern)])
-    
-    prompt = f"""Generate a 5-round rap beef battle between {r1.name} (Tier: {r1.tier}, Era: {r1.era}, Base Score: {r1_base}) 
-    and {r2.name} (Tier: {r2.tier}, Era: {r2.era}, Base Score: {r2_base}).
-    
-    War Zone Mode: {"ENABLED - Include dramatic ally interventions from hip-hop figures" if war_zone else "DISABLED"}
-    
-    IMPORTANT RULES:
-    1. Make the battle COMPETITIVE - each rapper should win at least 1-2 rounds. No blowouts!
-    2. For DISS TRACKS, always include a creative track name in quotes (e.g., "Back to Back", "Ether", "Hit 'Em Up")
-    3. Event types can be: Diss Track, Interview Diss, Social Media Beef, Surprise Performance, Feature Snub, Award Show Shade, Podcast Attack
-    4. Impact scores should be close (-5 to 5 range typically). A round winner gets +3 to +7, loser gets -3 to -7
-    5. The overall winner should only be slightly ahead, reflecting a competitive battle
-    6. CRITICAL - WINNER PATTERN: The round winners must NOT alternate predictably (not A,B,A,B,A). 
-       Use this exact winner pattern for the 5 rounds: {win_pattern_str}
-       Follow it exactly. This ensures unpredictability.
-    
-    Return ONLY a JSON object with this exact structure:
-    {{
-        "provocation": {{
-            "event_type": "Provocation",
-            "track_name": "optional creative name if applicable",
-            "description": "A dramatic setup explaining WHY this beef started - a chance encounter, stolen beat, subliminal bar, award show snub, interview callout, feature gone wrong, etc. Make it specific and creative. This should feel like the inciting incident.",
-            "instigator": "{r1.name}" or "{r2.name}"
-        }},
-        "events": [
-            {{
-                "round_number": 1,
-                "event_type": "Diss Track",
-                "track_name": "Creative Track Title Here",
-                "description": "Dramatic description mentioning the track name",
-                "winner": "{r1.name}" or "{r2.name}",
-                "impact_rapper1": -7 to 7 (positive if they won, negative if lost),
-                "impact_rapper2": -7 to 7 (positive if they won, negative if lost)
-                {"," + '"ally_intervention": {"name": "ally name", "power": "their power", "helped": "rapper name", "impact": 3}' if war_zone else ""}
-            }}
-        ],
-        "damage_report": {{
-            "rapper1_name": "{r1.name}",
-            "rapper1_final_score": calculated score (40-100, should be close to rapper2),
-            "rapper1_career_impact": "Description of career impact",
-            "rapper2_name": "{r2.name}",
-            "rapper2_final_score": calculated score (40-100, should be close to rapper1),
-            "rapper2_career_impact": "Description of career impact",
-            "overall_winner": "{r1.name}" or "{r2.name}",
-            "summary": "Epic summary emphasizing how close and competitive the beef was"
-        }}
-    }}"""
+    prompt = build_battle_prompt(request.rapper1, request.rapper2, request.war_zone, win_pattern_str)
     
     try:
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
-        
-        # Parse the JSON response
-        response_text = response.strip()
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.startswith("```"):
-            response_text = response_text[3:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
-        
-        battle_data = json.loads(response_text.strip())
+        response = await chat.send_message(UserMessage(text=prompt))
+        battle_data = parse_llm_response(response)
         
         provocation = Provocation(**battle_data["provocation"])
         events = [BattleEvent(**event) for event in battle_data["events"]]
         damage_report = DamageReport(**battle_data["damage_report"])
         
-        # Store battle in DB
-        battle_doc = {
-            "battle_id": battle_id,
-            "rapper1": r1.model_dump(),
-            "rapper2": r2.model_dump(),
-            "war_zone": war_zone,
-            "provocation": provocation.model_dump(),
-            "events": [e.model_dump() for e in events],
-            "damage_report": damage_report.model_dump(),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        await db.battles.insert_one(battle_doc)
+        await store_battle(battle_id, request, provocation, events, damage_report)
         
         return BattleResponse(
             battle_id=battle_id,
@@ -277,36 +270,31 @@ async def start_battle(request: BattleRequest):
             events=events,
             damage_report=damage_report
         )
-        
     except json.JSONDecodeError as e:
-        logger.error(f"JSON parse error: {e}, Response: {response}")
+        logger.error("JSON parse error: %s", e)
         raise HTTPException(status_code=500, detail="Failed to parse AI response")
     except Exception as e:
-        logger.error(f"Battle error: {e}")
+        logger.error("Battle error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
+async def create_status_check(input: StatusCheckCreate) -> StatusCheck:
+    status_obj = StatusCheck(**input.model_dump())
     doc = status_obj.model_dump()
     doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
+    await db.status_checks.insert_one(doc)
     return status_obj
 
 @api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
+async def get_status_checks() -> list[StatusCheck]:
     status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
     for check in status_checks:
         if isinstance(check['timestamp'], str):
             check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
     return status_checks
 
-# Include the router in the main app
+# --- App Setup ---
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -317,13 +305,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
 @app.on_event("shutdown")
-async def shutdown_db_client():
+async def shutdown_db_client() -> None:
     client.close()

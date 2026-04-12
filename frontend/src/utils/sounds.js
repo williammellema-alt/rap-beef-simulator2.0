@@ -27,7 +27,7 @@ export const playScaleTilt = () => {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.3);
   } catch (e) {
-    // Audio not available, silently fail
+    if (process.env.NODE_ENV === "development") console.warn("Audio playback failed:", e.message);
   }
 };
 
@@ -74,7 +74,7 @@ export const playBattleStart = () => {
     osc3.start(ctx.currentTime + 0.5);
     osc3.stop(ctx.currentTime + 0.8);
   } catch (e) {
-    // Audio not available
+    if (process.env.NODE_ENV === "development") console.warn("Audio playback failed:", e.message);
   }
 };
 
@@ -96,7 +96,7 @@ export const playNextRound = () => {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.2);
   } catch (e) {
-    // Audio not available
+    if (process.env.NODE_ENV === "development") console.warn("Audio playback failed:", e.message);
   }
 };
 
@@ -118,7 +118,7 @@ export const playVictory = () => {
       osc.stop(ctx.currentTime + i * 0.15 + 0.4);
     });
   } catch (e) {
-    // Audio not available
+    if (process.env.NODE_ENV === "development") console.warn("Audio playback failed:", e.message);
   }
 };
 
@@ -152,6 +152,6 @@ export const playProvocation = () => {
     osc2.start(ctx.currentTime + 0.3);
     osc2.stop(ctx.currentTime + 0.7);
   } catch (e) {
-    // Audio not available
+    if (process.env.NODE_ENV === "development") console.warn("Audio playback failed:", e.message);
   }
 };
