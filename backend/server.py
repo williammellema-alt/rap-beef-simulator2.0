@@ -146,19 +146,18 @@ def generate_win_pattern(name1: str, name2: str) -> list[str]:
         if not is_alternating and not is_uniform and both_win:
             return pattern
 
-def build_battle_prompt(r1: RapperInfo, r2: RapperInfo, war_zone: bool, win_pattern_str: str) -> str:
+def _build_matchup_intro(r1: RapperInfo, r2: RapperInfo, war_zone: bool) -> str:
     r1_base = get_tier_value(r1.tier) + get_era_bonus(r1.era)
     r2_base = get_tier_value(r2.tier) + get_era_bonus(r2.era)
-    
-    ally_snippet = ""
-    if war_zone:
-        ally_snippet = ',"ally_intervention": {"name": "ally name", "power": "their power", "helped": "rapper name", "impact": 3}'
+    wz = "ENABLED - Include dramatic ally interventions from hip-hop figures" if war_zone else "DISABLED"
+    return (
+        f"Generate a 5-round rap beef battle between {r1.name} (Tier: {r1.tier}, Era: {r1.era}, Base Score: {r1_base}) "
+        f"and {r2.name} (Tier: {r2.tier}, Era: {r2.era}, Base Score: {r2_base}).\n\n"
+        f"War Zone Mode: {wz}"
+    )
 
-    return f"""Generate a 5-round rap beef battle between {r1.name} (Tier: {r1.tier}, Era: {r1.era}, Base Score: {r1_base}) \
-and {r2.name} (Tier: {r2.tier}, Era: {r2.era}, Base Score: {r2_base}).
-
-War Zone Mode: {"ENABLED - Include dramatic ally interventions from hip-hop figures" if war_zone else "DISABLED"}
-
+def _build_rules(win_pattern_str: str) -> str:
+    return f"""
 IMPORTANT RULES:
 1. Make the battle COMPETITIVE - each rapper should win at least 1-2 rounds. No blowouts!
 2. EVERY round MUST have a creative track_name string (never null, never "None"). Examples: "Back to Back", "Ether", "Hit 'Em Up". Even non-diss-track rounds need a catchy name.
@@ -166,8 +165,14 @@ IMPORTANT RULES:
 4. Impact scores should be close (-5 to 5 range typically). A round winner gets +3 to +7, loser gets -3 to -7
 5. The overall winner should only be slightly ahead, reflecting a competitive battle. Final scores must be between 40-100 and within 10 points of each other.
 6. CRITICAL - WINNER PATTERN: You MUST use this exact winner sequence for rounds 1-5: {win_pattern_str}
-Follow it exactly. Do not deviate.
+Follow it exactly. Do not deviate."""
 
+def _build_json_template(r1: RapperInfo, r2: RapperInfo, war_zone: bool) -> str:
+    ally_snippet = ""
+    if war_zone:
+        ally_snippet = ',"ally_intervention": {"name": "ally name", "power": "their power", "helped": "rapper name", "impact": 3}'
+
+    return f"""
 Return ONLY a JSON object with this exact structure:
 {{
     "provocation": {{
@@ -198,6 +203,12 @@ Return ONLY a JSON object with this exact structure:
         "summary": "Epic summary emphasizing how close and competitive the beef was"
     }}
 }}"""
+
+def build_battle_prompt(r1: RapperInfo, r2: RapperInfo, war_zone: bool, win_pattern_str: str) -> str:
+    intro = _build_matchup_intro(r1, r2, war_zone)
+    rules = _build_rules(win_pattern_str)
+    template = _build_json_template(r1, r2, war_zone)
+    return f"{intro}\n{rules}\n{template}"
 
 def parse_llm_response(response_text: str) -> dict:
     """Strip markdown fences and parse JSON."""
