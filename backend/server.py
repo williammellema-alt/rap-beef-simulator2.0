@@ -238,9 +238,9 @@ async def get_rappers() -> list[dict]:
 async def start_battle(request: BattleRequest) -> BattleResponse:
     battle_id = str(uuid.uuid4())
     
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="LLM API key not configured")
+        raise HTTPException(status_code=500, detail="Gemini API key not configured")
     
     chat = LlmChat(
         api_key=api_key,
@@ -248,7 +248,7 @@ async def start_battle(request: BattleRequest) -> BattleResponse:
         system_message="You are a legendary hip-hop battle narrator and judge. You narrate rap beef events with dramatic flair, "
         "using authentic hip-hop culture references. You decide winners based on lyrical ability, cultural impact, and era-specific factors. "
         "Always respond with valid JSON only, no other text."
-    ).with_model("openai", "gpt-5.2")
+    ).with_model("gemini", "gemini-2.5-pro")
     
     win_pattern = generate_win_pattern(request.rapper1.name, request.rapper2.name)
     win_pattern_str = ", ".join([f"Round {i+1}: {w}" for i, w in enumerate(win_pattern)])
