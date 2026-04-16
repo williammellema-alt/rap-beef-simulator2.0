@@ -161,19 +161,18 @@ War Zone Mode: {"ENABLED - Include dramatic ally interventions from hip-hop figu
 
 IMPORTANT RULES:
 1. Make the battle COMPETITIVE - each rapper should win at least 1-2 rounds. No blowouts!
-2. For DISS TRACKS, always include a creative track name in quotes (e.g., "Back to Back", "Ether", "Hit 'Em Up")
+2. EVERY round MUST have a creative track_name string (never null, never "None"). Examples: "Back to Back", "Ether", "Hit 'Em Up". Even non-diss-track rounds need a catchy name.
 3. Event types can be: Diss Track, Interview Diss, Social Media Beef, Surprise Performance, Feature Snub, Award Show Shade, Podcast Attack
 4. Impact scores should be close (-5 to 5 range typically). A round winner gets +3 to +7, loser gets -3 to -7
-5. The overall winner should only be slightly ahead, reflecting a competitive battle
-6. CRITICAL - WINNER PATTERN: The round winners must NOT alternate predictably (not A,B,A,B,A). \
-Use this exact winner pattern for the 5 rounds: {win_pattern_str}
-Follow it exactly. This ensures unpredictability.
+5. The overall winner should only be slightly ahead, reflecting a competitive battle. Final scores must be between 40-100 and within 10 points of each other.
+6. CRITICAL - WINNER PATTERN: You MUST use this exact winner sequence for rounds 1-5: {win_pattern_str}
+Follow it exactly. Do not deviate.
 
 Return ONLY a JSON object with this exact structure:
 {{
     "provocation": {{
         "event_type": "Provocation",
-        "track_name": "optional creative name if applicable",
+        "track_name": "a creative name for this provocation incident",
         "description": "A dramatic setup explaining WHY this beef started - a chance encounter, stolen beat, subliminal bar, award show snub, interview callout, feature gone wrong, etc. Make it specific and creative. This should feel like the inciting incident.",
         "instigator": "{r1.name}" or "{r2.name}"
     }},
@@ -248,7 +247,7 @@ async def start_battle(request: BattleRequest) -> BattleResponse:
         system_message="You are a legendary hip-hop battle narrator and judge. You narrate rap beef events with dramatic flair, "
         "using authentic hip-hop culture references. You decide winners based on lyrical ability, cultural impact, and era-specific factors. "
         "Always respond with valid JSON only, no other text."
-    ).with_model("gemini", "gemini-2.5-pro")
+    ).with_model("gemini", "gemini-2.5-flash")
     
     win_pattern = generate_win_pattern(request.rapper1.name, request.rapper2.name)
     win_pattern_str = ", ".join([f"Round {i+1}: {w}" for i, w in enumerate(win_pattern)])
